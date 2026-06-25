@@ -1,10 +1,17 @@
 'use client';
+import type { VideoFile } from '@shared/types';
 
-const FilePicker = () => {
+type FilePickerProps = {
+  onSelect(video: VideoFile): void;
+};
+
+const FilePicker = ({ onSelect }: FilePickerProps) => {
   async function handleClick() {
     const file = await window.electron.dialog.openVideo();
 
-    console.log(file);
+    if (!file) return;
+
+    onSelect(file);
   }
   return (
     <button

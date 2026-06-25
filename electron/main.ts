@@ -1,11 +1,25 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, protocol } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './ipc/register';
+import { registerVideoProtocol } from './protocol/video.protocol';
+import { mediaServer } from './media/media.server';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const url = app.isPackaged ? '...' : 'http://localhost:3000';
+
+// protocol.registerSchemesAsPrivileged([
+//   {
+//     scheme: 'video',
+//     privileges: {
+//       standard: true,
+//       secure: true,
+//       supportFetchAPI: true,
+//       stream: true,
+//     },
+//   },
+// ]);
 
 async function createWindow() {
   const window = new BrowserWindow({
@@ -27,6 +41,9 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // registerVideoProtocol();
+  mediaServer.start();
+
   registerIpcHandlers();
 
   await createWindow();

@@ -1,4 +1,6 @@
 export type VideoFile = {
-  path: string;
+  id: string;
   name: string;
+  url: string;
+  mimeType?: string;
 };
