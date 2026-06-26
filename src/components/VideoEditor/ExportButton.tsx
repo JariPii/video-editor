@@ -1,0 +1,106 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useEditorStore } from '@/hooks/useEditorStore';
+
+type ExportState =
+  | { status: 'idle' }
+  | { status: 'exporting'; percent: number }
+  | { status: 'done'; path: string }
+  | { status: 'error'; message: string };
+
+const ExportButton = () => {
+  const video = useEditorStore((s) => s.video);
+  const inPoint = useEditorStore((s) => s.inPoint);
+  const outPoint = useEditorStore((s) => s.outPoint);
+
+  const [state, setState] = useState<ExportState>({ status: 'idle' });
+
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
+
+  const canExport =
+    video &&
+    inPoint !== null &&
+    outPoint !== null &&
+    state.status !== 'exporting';
+
+  const handleExport = async () => {
+    if (!canExport) return;
+
+    setState({ status: 'exporting', percent: 0 });
+
+    cleanupRef.current = window.electron.ffmpeg.onProgress((percent) => {
+      setState({ status: 'exporting', percent });
+    });
+
+    try {
+      const outputPath = await window.electron.ffmpeg.trim(
+        video.id,
+        inPoint,
+        outPoint,
+      );
+
+      if (outputPath) {
+        setState({ status: 'done', path: outputPath });
+      } else {
+        setState({ status: 'idle' });
+      }
+    } catch (err) {
+      setState({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    }
+  };
+
+  return (
+    <div className='mt-4 flex flex-col gap-2'>
+      <button
+        className='border border-white px-4 py-2 rounded-lg hover:bg-gray-500
+    disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+        onClick={handleExport}
+        disabled={!canExport}
+      >
+        {state.status === 'exporting'
+          ? `Exporting... ${state.percent}%`
+          : 'Export clip'}
+      </button>
+
+      {state.status === 'exporting' && (
+        <div className='h-1.5 w-full rounded bg-neutral-700'>
+          <div
+            className='h-full rounded bg-blue-500 transition-all duration-300'
+            style={{ width: `${state.percent}%` }}
+          />
+        </div>
+      )}
+
+      {state.status === 'done' && (
+        <p className='text-sm text-green-400'>Saved: {state.path}</p>
+      )}
+
+      {state.status === 'error' && (
+        <p className='text-sm text-red-400'>{state.message}</p>
+      )}
+
+      {state.status === 'idle' &&
+        video &&
+        (inPoint === null || outPoint === null) && (
+          <p className='text-xs text-gray-500'>
+            Press I and O to set in and out points.
+          </p>
+        )}
+    </div>
+  );
+};
+
+export default ExportButton;

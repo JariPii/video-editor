@@ -8,6 +8,17 @@ declare global {
       dialog: {
         openVideo(): Promise<VideoFile | null>;
       };
+      ffmpeg: {
+        trim(
+          videoId: string,
+          inPoint: number,
+          outPoint: number,
+        ): Promise<string | null>;
+        concat(
+          clips: { videoId: string; inPoint: number; outPoint: number }[],
+        ): Promise<string | null>;
+        onProgress(callback: (percent: number) => void): () => void;
+      };
     };
   }
 }

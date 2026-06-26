@@ -8,6 +8,8 @@ export const IPC = {
     probe: 'ffmpeg:probe',
     trim: 'ffmpeg:trim',
     export: 'ffmpeg:export',
+    progress: 'ffmpeg:progress',
+    concat: 'ffmpeg:concat',
   },
 
   project: {

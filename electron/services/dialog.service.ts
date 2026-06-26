@@ -29,3 +29,16 @@ export async function openVideo(): Promise<VideoFile | null> {
     url: mediaServer.mediaUrl(id),
   };
 }
+
+export async function saveVideo(): Promise<string | null> {
+  const result = await dialog.showSaveDialog({
+    filters: [{ name: 'Video', extensions: ['mp4'] }],
+    defaultPath: 'clip.mp4',
+  });
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  return result.filePath;
+}
