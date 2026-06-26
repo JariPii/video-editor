@@ -10,6 +10,7 @@ export const IPC = {
     export: 'ffmpeg:export',
     progress: 'ffmpeg:progress',
     concat: 'ffmpeg:concat',
+    thumbnail: 'ffmpeg:thumbnail',
   },
 
   project: {

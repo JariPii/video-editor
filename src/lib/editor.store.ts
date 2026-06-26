@@ -5,7 +5,8 @@ function uuid(): string {
 }
 
 export type EditorState = {
-  video: VideoFile | null;
+  videos: VideoFile[];
+  activeVideoId: string | null;
   duration: number;
   currentTime: number;
   playing: boolean;
@@ -23,7 +24,8 @@ export interface PlayerController {
 
 class EditorStore {
   #state: EditorState = {
-    video: null,
+    videos: [],
+    activeVideoId: null,
     duration: 0,
     currentTime: 0,
     playing: false,
@@ -74,9 +76,39 @@ class EditorStore {
     this.notify();
   };
 
-  public setVideo = (video: VideoFile | null) => {
+  public addVideo = (video: VideoFile) => {
+    const { videos } = this.#state;
+
+    if (videos.find((v) => v.id == video.id)) return;
     this.update({
-      video,
+      videos: [...videos, video],
+      activeVideoId: video.id,
+      inPoint: null,
+      outPoint: null,
+      currentTime: 0,
+      duration: 0,
+    });
+  };
+
+  public removeVideo = (videoId: string) => {
+    const { videos, activeVideoId } = this.#state;
+    const remaining = videos.filter((v) => v.id !== videoId);
+
+    const newActiveId =
+      activeVideoId === videoId ? (remaining[0]?.id ?? null) : activeVideoId;
+    this.update({
+      videos: remaining,
+      activeVideoId: newActiveId,
+      inPoint: null,
+      outPoint: null,
+      currentTime: 0,
+      duration: 0,
+    });
+  };
+
+  public setActiveVideo = (videoId: string) => {
+    this.update({
+      activeVideoId: videoId,
       inPoint: null,
       outPoint: null,
       currentTime: 0,
@@ -117,13 +149,13 @@ class EditorStore {
   };
 
   public addClip = () => {
-    const { video, inPoint, outPoint, track } = this.#state;
+    const { activeVideoId, inPoint, outPoint, track } = this.#state;
 
-    if (!video || inPoint === null || outPoint === null) return;
+    if (!activeVideoId || inPoint === null || outPoint === null) return;
 
     const clip: Clip = {
       id: uuid(),
-      videoId: video.id,
+      videoId: activeVideoId,
       inPoint,
       outPoint,
     };
@@ -158,7 +190,8 @@ class EditorStore {
 export const editorStore = new EditorStore();
 
 export const editorActions = {
-  setVideo: editorStore.setVideo,
+  addVideo: editorStore.addVideo,
+  removeVideo: editorStore.removeVideo,
   setCurrentTime: editorStore.setCurrentTime,
   setDuration: editorStore.setDuration,
   setPlaying: editorStore.setPlaying,

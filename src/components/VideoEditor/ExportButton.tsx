@@ -10,7 +10,7 @@ type ExportState =
   | { status: 'error'; message: string };
 
 const ExportButton = () => {
-  const video = useEditorStore((s) => s.video);
+  const activeVideoId = useEditorStore((s) => s.activeVideoId);
   const inPoint = useEditorStore((s) => s.inPoint);
   const outPoint = useEditorStore((s) => s.outPoint);
 
@@ -25,7 +25,7 @@ const ExportButton = () => {
   }, []);
 
   const canExport =
-    video &&
+    activeVideoId &&
     inPoint !== null &&
     outPoint !== null &&
     state.status !== 'exporting';
@@ -41,7 +41,7 @@ const ExportButton = () => {
 
     try {
       const outputPath = await window.electron.ffmpeg.trim(
-        video.id,
+        activeVideoId,
         inPoint,
         outPoint,
       );
@@ -93,7 +93,7 @@ const ExportButton = () => {
       )}
 
       {state.status === 'idle' &&
-        video &&
+        activeVideoId &&
         (inPoint === null || outPoint === null) && (
           <p className='text-xs text-gray-500'>
             Press I and O to set in and out points.

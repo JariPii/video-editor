@@ -68,4 +68,15 @@ export function registerIpcHandlers() {
       return outputPath;
     },
   );
+
+  ipcMain.handle(
+    IPC.ffmpeg.thumbnail,
+    async (event: IpcMainInvokeEvent, videoId: string) => {
+      const inputPath = mediaRegistry.resolve(videoId);
+
+      if (!inputPath) throw new Error(`No file found for id: ${videoId}`);
+
+      return ffmpegService.extractThumbnail(inputPath);
+    },
+  );
 }

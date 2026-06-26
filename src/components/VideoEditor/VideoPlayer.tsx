@@ -3,6 +3,12 @@ import { editorStore, PlayerController } from '@/lib/editor.store';
 import { useEditorStore } from '@/hooks/useEditorStore';
 
 const VideoPlayer = () => {
+  const videos = useEditorStore((s) => s.videos);
+  const activeVideoId = useEditorStore((s) => s.activeVideoId);
+  const activeVideo = videos.find((v) => v.id === activeVideoId) ?? null;
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const controller = useMemo<PlayerController>(
     () => ({
       play: async () => {
@@ -36,11 +42,7 @@ const VideoPlayer = () => {
     };
   }, [controller]);
 
-  const video = useEditorStore((state) => state.video);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  if (!video) {
+  if (!activeVideo) {
     return <p>No video selected</p>;
   }
 
@@ -70,13 +72,13 @@ const VideoPlayer = () => {
 
   return (
     <>
-      <h3>{video.name}</h3>
+      <h3>{activeVideo.name}</h3>
 
       <video
         ref={videoRef}
         controls
         width={900}
-        src={video.url}
+        src={activeVideo.url}
         onLoadedMetadata={handleLoadedMetaData}
         onTimeUpdate={handleTimeUpdate}
         onPlay={handlePlay}

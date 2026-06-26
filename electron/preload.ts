@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('electron', {
     concat: (clips: { videoOd: string; inPoint: number; outPoint: number }[]) =>
       ipcRenderer.invoke(IPC.ffmpeg.concat, clips) as Promise<string | null>,
 
+    thumbnail: (videoId: string) =>
+      ipcRenderer.invoke(IPC.ffmpeg.thumbnail, videoId) as Promise<string>,
+
     onProgress: (callback: (percent: number) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, percent: number) => {
         callback(percent);

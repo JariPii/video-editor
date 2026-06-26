@@ -17,6 +17,7 @@ declare global {
         concat(
           clips: { videoId: string; inPoint: number; outPoint: number }[],
         ): Promise<string | null>;
+        thumbnail(videoId: string): Promise<string>;
         onProgress(callback: (percent: number) => void): () => void;
       };
     };

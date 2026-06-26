@@ -164,3 +164,49 @@ export async function concatClips(options: ConcatOptions): Promise<void> {
     });
   });
 }
+
+export async function extractThumbnail(inputPath: string): Promise<string> {
+  const ffmpegPath = getFfmpegPath();
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-ss',
+      '0',
+      '-i',
+      inputPath,
+      '-frames:v',
+      '1',
+      '-f',
+      'image2pipe',
+      '-vcodec',
+      'png',
+      '-vf',
+      'scale=160:-1',
+      'pipe:1',
+    ];
+
+    const proc = spawn(ffmpegPath, args);
+
+    const chunks: Buffer[] = [];
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      console.log('[ffmpeg thumbnail]', data.toString());
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code === 0) {
+        const buffer = Buffer.concat(chunks);
+        const base64 = `data:image/png;base64,${buffer.toString('base64')}`;
+        resolve(base64);
+      } else {
+        reject(new Error(`FFmpeg thumbnail ended tieh code ${code}`));
+      }
+    });
+
+    proc.on('error', reject);
+  });
+}
