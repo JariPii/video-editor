@@ -11,6 +11,8 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
 }
 
+const PIXELS_PER_SECOND = 100;
+
 type DragTarget = 'playhead' | 'in' | 'out' | null;
 
 const TimeLine = () => {
@@ -18,32 +20,128 @@ const TimeLine = () => {
   const currentTIme = useEditorStore((s) => s.currentTime);
   const inPoint = useEditorStore((s) => s.inPoint);
   const outPoint = useEditorStore((s) => s.outPoint);
+  const zoom = useEditorStore((s) => s.zoom);
+  const scrollLeft = useEditorStore((s) => s.scrollLeft);
 
-  const trackRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const dragTarget = useRef<DragTarget>(null);
+  const wasPlaying = useRef(false);
+  const mouseXRef = useRef(0);
+  const autoScrollRef = useRef(0);
 
-  const progress = duration === 0 ? 0 : (currentTIme / duration) * 100;
-  const inPct =
-    inPoint !== null && duration > 0 ? (inPoint / duration) * 100 : null;
-  const outPct =
-    outPoint !== null && duration > 0 ? (outPoint / duration) * 100 : null;
+  const pps = PIXELS_PER_SECOND * zoom;
 
-  const timeFromClientX = useCallback(
+  const totalWidth = Math.max(duration * pps, 600);
+
+  const timeToX = (time: number) => time * pps;
+
+  const xToTime = useCallback(
     (clientX: number): number => {
-      if (!trackRef.current || duration === 0) return 0;
+      if (!viewportRef.current || duration === 0) return 0;
 
-      const rect = trackRef.current.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return pct * duration;
+      const rect = viewportRef.current.getBoundingClientRect();
+      const x = Math.max(0, clientX - rect.left + scrollLeft);
+      return Math.max(0, Math.min(duration, x / pps));
     },
-    [duration],
+    [duration, pps, scrollLeft],
   );
 
   useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      if (e.shiftKey) {
+        const next = scrollLeft + e.deltaY;
+        editorStore.setScrollLeft(next);
+        el.scrollLeft = next;
+      } else {
+        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        editorStore.setZoom(zoom * factor);
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, scrollLeft]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    editorStore.setScrollLeft(e.currentTarget.scrollLeft);
+  };
+
+  useEffect(() => {
+    if (duration === 0) return;
+    const frame = requestAnimationFrame(() => {
+      if (!viewportRef.current) return;
+      const viewportWidth = viewportRef.current.getBoundingClientRect().width;
+      if (viewportWidth === 0) return;
+      const fitZoom = viewportWidth / (duration * PIXELS_PER_SECOND);
+      editorStore.setZoom(fitZoom);
+    });
+    return () => cancelAnimationFrame(frame);
+    // if (!viewportRef.current || duration === 0) return;
+    // const viewportWidth = viewportRef.current.getBoundingClientRect().width;
+    // const fitZoom = viewportWidth / (duration * PIXELS_PER_SECOND);
+    // editorStore.setZoom(fitZoom);
+  }, [duration]);
+
+  const startDrag = (e: React.MouseEvent, target: DragTarget) => {
+    e.stopPropagation();
+
+    wasPlaying.current = editorStore.getState().playing;
+
+    editorStore.player?.pause();
+    dragTarget.current = target;
+    startAutoscroll();
+  };
+
+  const startAutoscroll = () => {
+    const EDGE_ZONE = 40;
+    const MAX_SPEED = 5;
+
+    const loop = () => {
+      const el = viewportRef.current;
+      if (!el || !dragTarget.current) return;
+
+      const rect = el.getBoundingClientRect();
+      const mouseX = mouseXRef.current;
+
+      const distFromRight = rect.right - mouseX;
+      const distFromLeft = mouseX - rect.left;
+
+      let delta = 0;
+
+      if (distFromRight < EDGE_ZONE) {
+        delta = Math.round(MAX_SPEED * (1 - distFromRight / EDGE_ZONE));
+      } else if (distFromLeft < EDGE_ZONE) {
+        delta = -Math.round(MAX_SPEED * (1 - distFromLeft / EDGE_ZONE));
+      }
+
+      if (delta !== 0) {
+        el.scrollLeft += delta;
+        editorStore.setScrollLeft(el.scrollLeft);
+      }
+
+      autoScrollRef.current = requestAnimationFrame(loop);
+    };
+
+    autoScrollRef.current = requestAnimationFrame(loop);
+  };
+
+  const stopAutoScroll = () => {
+    cancelAnimationFrame(autoScrollRef.current);
+  };
+
+  useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
+      mouseXRef.current = e.clientX;
+
       const target = dragTarget.current;
       if (!target) return;
-      const time = timeFromClientX(e.clientX);
+
+      const time = xToTime(e.clientX);
 
       if (target === 'playhead') {
         editorStore.setCurrentTime(time);
@@ -56,25 +154,20 @@ const TimeLine = () => {
     };
 
     const onMouseUp = () => {
+      if (dragTarget.current === 'playhead' && wasPlaying.current) {
+        editorStore.player?.play();
+      }
+      stopAutoScroll();
       dragTarget.current = null;
     };
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-
     return () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     };
-  }, [timeFromClientX]);
-
-  const handleTrackMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (duration === 0) return;
-    dragTarget.current = 'playhead';
-    const time = timeFromClientX(e.clientX);
-    editorStore.setCurrentTime(time);
-    editorStore.player?.seek(time);
-  };
+  }, [xToTime]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -92,22 +185,28 @@ const TimeLine = () => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const handleTrackMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (duration === 0) return;
+    startDrag(e, 'playhead');
+    const time = xToTime(e.clientX);
+    editorStore.setCurrentTime(time);
+    editorStore.player?.seek(time);
+  };
+
   const ticks = () => {
     if (duration === 0) return null;
 
+    const secondsPerTick = pps >= 200 ? 1 : pps >= 50 ? 5 : pps >= 20 ? 10 : 30;
     const marks = [];
 
-    const interval = duration > 120 ? 10 : duration > 30 ? 5 : 1;
-
-    for (let t = interval; t < duration; t += interval) {
-      const pct = (t / duration) * 100;
-      const isMajor = t % (interval * 5) === 0 || interval >= 5;
+    for (let t = 0; t < duration; t += secondsPerTick) {
+      const isMajor = t % (secondsPerTick * 5) === 0;
 
       marks.push(
         <div
           key={t}
           className='absolute flex flex-col items-center'
-          style={{ left: `${pct}%` }}
+          style={{ left: timeToX(t) }}
         >
           {isMajor && (
             <span
@@ -126,64 +225,86 @@ const TimeLine = () => {
     return marks;
   };
 
+  const playheadX = timeToX(currentTIme);
+  const inX = inPoint !== null ? timeToX(inPoint) : null;
+  const outX = outPoint !== null ? timeToX(outPoint) : null;
+
   return (
     <div className='mt-6 w-full max-w-4xl select-none'>
-      <div className='relative h-6 mb-1'>{ticks()}</div>
+      <div className='mb-1 flex items-center gap-3 text-xs text-gray-500'>
+        <span>Zoom: {zoom.toFixed(1)}</span>
+        <span className='text-gray-700'>
+          Scroll with mousewheel - Shift+scroll to pan
+        </span>
+      </div>
 
       <div
-        ref={trackRef}
-        className='relative h-4 rounded bg-neutral-800 cursor-pointer'
-        onMouseDown={handleTrackMouseDown}
+        ref={viewportRef}
+        className='overflow-x-auto'
+        onScroll={handleScroll}
       >
-        {inPct !== null && outPct !== null && (
-          <div
-            className='absolute top-0 bottom-0 bg-blue-500 opacity-25'
-            style={{ left: `${inPct}%`, width: `${outPct - inPct}%` }}
-          />
-        )}
+        <div style={{ width: totalWidth, position: 'relative' }}>
+          <div className='relative h-6 mb-1'>{ticks()}</div>
 
-        {inPct !== null && (
           <div
-            className='absolute top-0 bottom-0 w-0.5 bg-green-400 cursor-ew-resize'
-            style={{ left: `${inPct}%` }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              dragTarget.current = 'in';
-            }}
+            className='relative h-4 rounded bg-neutral-800 cursor-pointer'
+            onMouseDown={handleTrackMouseDown}
           >
-            <div className='absolute -top-2 left-0 w-3 h-3 bg-green-400 rounded-sm' />
-          </div>
-        )}
+            {inX !== null && outX !== null && (
+              <div
+                className='absolute top-0 bottom-0 bg-blue-500 opacity-25'
+                style={{ left: inX, width: outX - inX }}
+              />
+            )}
 
-        {outPct !== null && (
-          <div
-            className='absolute top-0 bottom-0 w-0.5 bg-red-400 cursor-ew-resize'
-            style={{ left: `${outPct}%` }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              dragTarget.current = 'out';
-            }}
-          >
-            <div className='absolute -top-2 -left-3 w-3 h-3 bg-red-400 rounded-sm' />
-          </div>
-        )}
+            {inX !== null && (
+              <div
+                className='absolute top-0 bottom-0 w-0.5 bg-green-400 cursor-ew-resize'
+                style={{ left: inX }}
+                onMouseDown={(e) => startDrag(e, 'in')}
+              >
+                <div className='absolute -top-2 left-0 w-3 h-3 bg-green-400 rounde-sm' />
+              </div>
+            )}
 
-        <div
-          className='absolute top-0 bottom-0 w-0.5 bg-white cursor-ew-resize z-10'
-          style={{ left: `${progress}%` }}
-        >
-          {formatTime(currentTIme)}
+            {outX !== null && (
+              <div
+                className='absolute top-0 bottom-0 w-0.5 bg-red-400 cursor-ew-resize'
+                style={{ left: outX }}
+                onMouseDown={(e) => startDrag(e, 'out')}
+              >
+                <div className='absolute -top-2 right-0 w-3 h-3 bg-red-400 rounde-sm' />
+              </div>
+            )}
+
+            <div
+              className='absolute top-0 bottom-0 w-0.5 bg-white cursor-ew-resize z-10'
+              style={{ left: playheadX }}
+              onMouseDown={(e) => startDrag(e, 'playhead')}
+            >
+              <div className='absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white' />
+            </div>
+          </div>
+
+          <div className='relative h-6 mt-1'>
+            <div
+              className='absolute -translate-y-1/2 text-[11px] font-mono text-gray-300 bg-neutral-900 px-1.5 py-0.5 rounded whitespace-nowrap'
+              style={{ left: playheadX }}
+            >
+              {formatTime(currentTIme)}
+            </div>
+          </div>
         </div>
       </div>
 
       {(inPoint !== null || outPoint !== null) && (
-        <div className='mt-3 flex gap-4 text-[11px] font-mono text-gray-400'>
+        <div className='mt-2 flex gap-4 text-[11px] font-mono text-gray-400'>
           {inPoint !== null && (
             <span className='flex items-center gap-1'>
               <span className='text-green-400'>IN</span>
               {formatTime(inPoint)}
               <button
-                className='ml-1 text-gray-600 hover:text.gray-300'
+                className='ml-1 text-gray-600 hover:text-gray-300'
                 onClick={() => editorStore.setInPoint(null)}
               >
                 X
@@ -192,7 +313,7 @@ const TimeLine = () => {
           )}
           {outPoint !== null && (
             <span className='flex items-center gap-1'>
-              <span className='text-red-400'>OUT</span>
+              <span className='text-green-400'>OUT</span>
               {formatTime(outPoint)}
               <button
                 className='ml-1 text-gray-600 hover:text-gray-300'
@@ -200,11 +321,6 @@ const TimeLine = () => {
               >
                 X
               </button>
-            </span>
-          )}
-          {inPoint !== null && outPoint !== null && (
-            <span className='text-gray-600'>
-              Length: {formatTime(outPoint - inPoint)}
             </span>
           )}
         </div>
