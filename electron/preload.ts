@@ -10,16 +10,32 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   ffmpeg: {
-    trim: (videoId: string, inPoint: number, outPoint: number) =>
+    trim: (
+      videoId: string,
+      inPoint: number,
+      outPoint: number,
+      settings: {
+        mode: 'copy' | 'recode';
+        speed: number;
+        quality: number;
+        noAudio: boolean;
+      },
+    ) =>
       ipcRenderer.invoke(
         IPC.ffmpeg.trim,
         videoId,
         inPoint,
         outPoint,
+        settings,
       ) as Promise<string | null>,
 
-    concat: (clips: { videoOd: string; inPoint: number; outPoint: number }[]) =>
-      ipcRenderer.invoke(IPC.ffmpeg.concat, clips) as Promise<string | null>,
+    concat: (
+      clips: { videoOd: string; inPoint: number; outPoint: number }[],
+      noAudio: boolean,
+    ) =>
+      ipcRenderer.invoke(IPC.ffmpeg.concat, clips, noAudio) as Promise<
+        string | null
+      >,
 
     thumbnail: (videoId: string) =>
       ipcRenderer.invoke(IPC.ffmpeg.thumbnail, videoId) as Promise<string>,

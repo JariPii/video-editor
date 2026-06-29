@@ -11,7 +11,19 @@ export function registerIpcHandlers() {
 
   ipcMain.handle(
     IPC.ffmpeg.trim,
-    async (event, videoId: string, inPoint: number, outPoint: number) => {
+    async (
+      event,
+      videoId: string,
+      inPoint: number,
+      outPoint: number,
+
+      settings: {
+        mode: 'copy' | 'recode';
+        speed: number;
+        quality: number;
+        noAudio: boolean;
+      },
+    ) => {
       const inputPath = mediaRegistry.resolve(videoId);
 
       if (!inputPath) {
@@ -29,6 +41,7 @@ export function registerIpcHandlers() {
         outputPath,
         inPoint,
         outPoint,
+        ...settings,
         onProgress: (percent) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send(IPC.ffmpeg.progress, percent);
@@ -44,7 +57,12 @@ export function registerIpcHandlers() {
     IPC.ffmpeg.concat,
     async (
       event: IpcMainInvokeEvent,
-      clipIds: { videoId: string; inPoint: number; outPoint: number }[],
+      clipIds: {
+        videoId: string;
+        inPoint: number;
+        outPoint: number;
+      }[],
+      noAudio: boolean,
     ) => {
       const clips = clipIds.map((c) => {
         const inputPath = mediaRegistry.resolve(c.videoId);
@@ -58,6 +76,7 @@ export function registerIpcHandlers() {
       await ffmpegService.concatClips({
         clips,
         outputPath,
+        noAudio,
         onProgress: (percent) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send(IPC.ffmpeg.progress, percent);

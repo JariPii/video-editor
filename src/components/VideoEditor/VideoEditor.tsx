@@ -9,6 +9,7 @@ import TimeLine from './TimeLine';
 import ExportButton from './ExportButton';
 import ClipList from './ClipList';
 import VideoPanel from './VideoPanel';
+import OutputSettings from './OutputSettings';
 
 const VideoEditor = () => {
   const activeVideoId = useEditorStore((s) => s.activeVideoId);
@@ -33,6 +34,7 @@ const VideoEditor = () => {
         </div>
       )}
 
+      <OutputSettings />
       <ExportButton />
       <ClipList />
     </div>

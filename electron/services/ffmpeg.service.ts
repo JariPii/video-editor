@@ -22,6 +22,12 @@ export type TrimOptions = {
   outputPath: string;
   inPoint: number;
   outPoint: number;
+  mode: 'copy' | 'recode';
+  speed?: number;
+  quality?: number;
+  noAudio?: boolean;
+  interpolate?: boolean;
+  fps?: number;
   onProgress?: (percent: number) => void;
 };
 
@@ -34,6 +40,7 @@ export type ConcatClip = {
 export type ConcatOptions = {
   clips: ConcatClip[];
   outputPath: string;
+  noAudio?: boolean;
   onProgress?: (percent: number) => void;
 };
 
@@ -56,34 +63,82 @@ function parseProgress(stderr: string, durationSeconds: number): number | null {
 }
 
 export async function trimVideo(options: TrimOptions): Promise<void> {
-  const { inputPath, outputPath, inPoint, outPoint, onProgress } = options;
+  const {
+    inputPath,
+    outputPath,
+    inPoint,
+    outPoint,
+    mode,
+    speed = 1.0,
+    quality = 18,
+    noAudio,
+    onProgress,
+  } = options;
   const duration = outPoint - inPoint;
   const ffmpegPath = getFfmpegPath();
 
   return new Promise((resolve, reject) => {
-    const args = [
-      '-y',
-      '-ss',
-      String(inPoint),
-      '-t',
-      String(duration),
-      '-i',
-      inputPath,
-      '-c',
-      'copy',
-      outputPath,
-    ];
+    let args: string[];
+
+    if (mode === 'copy') {
+      args = [
+        '-y',
+        '-ss',
+        String(inPoint),
+        '-t',
+        String(duration),
+        '-i',
+        inputPath,
+        '-c',
+        'copy',
+        ...(noAudio ? ['-an'] : []),
+        outputPath,
+      ];
+    } else {
+      const targetFps = options.fps ?? 60;
+      const videoFilter =
+        (options.interpolate ?? speed < 1.0)
+          ? `minterpolate=fps=${targetFps}:mi_mode=mci:mc_mode=aobmc,setpts=${1 / speed}*PTS`
+          : `setpts=${1 / speed}*PTS`;
+      args = [
+        '-y',
+        '-i',
+        inputPath,
+        '-ss',
+        String(inPoint),
+        '-t',
+        String(duration),
+        '-filter:v',
+        videoFilter,
+        '-c:v',
+        'libx264',
+        '-preset',
+        'slow',
+        '-crf',
+        String(quality),
+        ...(noAudio
+          ? ['-an']
+          : [
+              '-filter:a',
+              `atempo=${Math.max(0.5, Math.min(2.0, speed))}}`,
+              '-c:a',
+              'aac',
+            ]),
+        outputPath,
+      ];
+    }
 
     console.log('[ffmpeg] Running:', ffmpegPath, args.join(' '));
 
     const proc = spawn(ffmpegPath, args);
+    const outputDuration = mode === 'recode' ? duration / speed : duration;
 
     proc.stderr.on('data', (data: Buffer) => {
       const text = data.toString();
       console.log('[ffmpeg]', data.toString());
 
       if (onProgress) {
-        const percent = parseProgress(text, duration);
+        const percent = parseProgress(text, outputDuration);
         if (percent !== null) {
           onProgress(percent);
         }
@@ -104,7 +159,7 @@ export async function trimVideo(options: TrimOptions): Promise<void> {
 }
 
 export async function concatClips(options: ConcatOptions): Promise<void> {
-  const { clips, outputPath, onProgress } = options;
+  const { clips, outputPath, noAudio, onProgress } = options;
   const ffmpegPath = getFfmpegPath();
 
   const totalDuration = clips.reduce(
@@ -136,6 +191,7 @@ export async function concatClips(options: ConcatOptions): Promise<void> {
       listPath,
       '-c',
       'copy',
+      ...(noAudio ? ['-an'] : []),
       outputPath,
     ];
 

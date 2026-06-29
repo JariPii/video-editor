@@ -1,4 +1,5 @@
-import type { VideoFile, Clip, Track } from '@shared/types';
+import type { VideoFile, Clip, Track, ExportSettings } from '@shared/types';
+import { DEFAULT_EXPORT_SETTINGS } from '@shared/types';
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -13,6 +14,9 @@ export type EditorState = {
   inPoint: number | null;
   outPoint: number | null;
   track: Track;
+  zoom: number;
+  scrollLeft: number;
+  exportSettings: ExportSettings;
 };
 
 export interface PlayerController {
@@ -32,6 +36,9 @@ class EditorStore {
     inPoint: null,
     outPoint: null,
     track: { id: uuid(), clips: [] },
+    zoom: 1,
+    scrollLeft: 0,
+    exportSettings: DEFAULT_EXPORT_SETTINGS,
   };
 
   #player: PlayerController | null = null;
@@ -178,12 +185,28 @@ class EditorStore {
     });
   };
 
+  public setExportSettings = (settings: Partial<ExportSettings>) => {
+    this.update({
+      exportSettings: { ...this.#state.exportSettings, ...settings },
+    });
+  };
+
   public reorderClips = (fromIndex: number, toIndex: number) => {
     const { track } = this.#state;
     const clips = [...track.clips];
     const [moved] = clips.splice(fromIndex, 1);
     clips.splice(toIndex, 0, moved);
     this.update({ track: { ...track, clips } });
+  };
+
+  public setZoom = (zoom: number) => {
+    const clamped = Math.max(0.01, Math.min(20, zoom));
+    this.update({ zoom: clamped });
+  };
+
+  public setScrollLeft = (scrollLeft: number) => {
+    const clamped = Math.max(0, scrollLeft);
+    this.update({ scrollLeft: clamped });
   };
 }
 
@@ -200,4 +223,7 @@ export const editorActions = {
   addClip: editorStore.addClip,
   removeClip: editorStore.removeClip,
   reorderClips: editorStore.reorderClips,
+  setZoom: editorStore.setZoom,
+  setScrollLeft: editorStore.setScrollLeft,
+  setExportSettings: editorStore.setExportSettings,
 };

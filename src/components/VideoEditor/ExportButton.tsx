@@ -13,6 +13,7 @@ const ExportButton = () => {
   const activeVideoId = useEditorStore((s) => s.activeVideoId);
   const inPoint = useEditorStore((s) => s.inPoint);
   const outPoint = useEditorStore((s) => s.outPoint);
+  const exportSettings = useEditorStore((s) => s.exportSettings);
 
   const [state, setState] = useState<ExportState>({ status: 'idle' });
 
@@ -44,6 +45,7 @@ const ExportButton = () => {
         activeVideoId,
         inPoint,
         outPoint,
+        exportSettings,
       );
 
       if (outputPath) {
@@ -64,6 +66,14 @@ const ExportButton = () => {
 
   return (
     <div className='mt-4 flex flex-col gap-2'>
+      {/* <label className='flex items-center gap-2 text-xs text-gray-400'>
+        <input
+          type='checkbox'
+          checked={noAudio}
+          onChange={(e) => setNoAudio(e.target.checked)}
+        />
+        Export without sound
+      </label> */}
       <button
         className='border border-white px-4 py-2 rounded-lg hover:bg-gray-500
     disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
